@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <title>Inventur Suche</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f7;
+            padding: 16px;
+            min-height: 100vh;
+            padding-bottom: 40px;
+        }
+
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            font-size: 24px;
+            font-weight: 600;
+            color: #1d1d1f;
+            margin-bottom: 16px;
+            text-align: center;
+        }
+
+        .search-box {
+            width: 100%;
+            height: 60px;
+            font-size: 20px;
+            padding: 12px 16px;
+            border: none;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            background: #fff;
+            outline: none;
+            transition: box-shadow 0.2s;
+        }
+
+        .search-box:focus {
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+
+        .filter-container {
+            margin-top: 12px;
+            display: flex;
+            gap: 8px;
+            overflow-x: auto;
+            padding-bottom: 8px;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: none;
+        }
+
+        .filter-container::-webkit-scrollbar {
+            display: none;
+        }
+
+        .filter-button {
+            flex-shrink: 0;
+            padding: 10px 16px;
+            border: none;
+            border-radius: 20px;
+            background: #e8e8ed;
+            color: #1d1d1f;
+            font-size: 15px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+
+        .filter-button.active {
+            background: #007aff;
+            color: #fff;
+        }
+
+        .filter-button:active {
+            transform: scale(0.95);
+        }
+
+        .results {
+            margin-top: 20px;
+        }
+
+        .result-item {
+            background: #fff;
+            padding: 16px;
+            border-radius: 10px;
+            margin-bottom: 10px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+
+        .result-name {
+            font-size: 18px;
+            font-weight: 500;
+            color: #1d1d1f;
+            margin-bottom: 4px;
+        }
+
+        .result-location {
+            font-size: 15px;
+            color: #86868b;
+        }
+
+        .no-results {
+            text-align: center;
+            color: #86868b;
+            font-size: 16px;
+            margin-top: 40px;
+        }
+
+        .loading {
+            text-align: center;
+            color: #86868b;
+            font-size: 16px;
+            margin-top: 40px;
+        }
+
+        .result-count {
+            font-size: 14px;
+            color: #86868b;
+            margin-bottom: 12px;
+            text-align: right;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Inventur</h1>
+        <input type="text" class="search-box" placeholder="Produkt suchen..." id="searchInput" autofocus>
+        <div class="filter-container" id="filterContainer"></div>
+        <div class="results" id="results"></div>
+    </div>
+
+    <script>
+        const positionMap = {
+            'oben': 'yukarılarda',
+            'mitte': 'ortalarda',
+            'unten': 'altlarda'
+        };
+
+        let inventory = [];
+        let currentFilter = 'Alle';
+        let uniqueBereiche = ['Alle'];
+
+        // CSV'yi parse et
+        async function loadCSV() {
+            try {
+                const response = await fetch('inventur-data.csv');
+                if (!response.ok) {
+                    throw new Error('CSV yüklenemedi');
+                }
+                const text = await response.text();
+                const lines = text.trim().split('\n');
+
+                inventory = lines.slice(1).map(line => {
+                    const parts = line.split(';');
+                    return {
+                        bereich: parts[0]?.trim() || '',
+                        artikel: parts[1]?.trim() || '',
+                        seite: parts[2]?.trim() || '',
+                        position: parts[3]?.trim() || ''
+                    };
+                }).filter(item => item.artikel);
+
+                // Benzersiz Bereich'leri al
+                const bereicheSet = new Set(inventory.map(item => item.bereich).filter(b => b));
+                uniqueBereiche = ['Alle', ...Array.from(bereicheSet).sort()];
+
+                // Filtre butonlarını oluştur
+                createFilterButtons();
+
+            } catch (error) {
+                console.error('CSV yüklenemedi:', error);
+                document.getElementById('results').innerHTML =
+                    '<div class="no-results">CSV dosyası yüklenemedi</div>';
+            }
+        }
+
+        // Filtre butonlarını oluştur
+        function createFilterButtons() {
+            const container = document.getElementById('filterContainer');
+            container.innerHTML = uniqueBereiche.map(bereich => `
+                <button class="filter-button ${bereich === 'Alle' ? 'active' : ''}"
+                        data-bereich="${escapeHtml(bereich)}">
+                    ${escapeHtml(bereich)}
+                </button>
+            `).join('');
+
+            // Event listener'ları ekle
+            container.querySelectorAll('.filter-button').forEach(button => {
+                button.addEventListener('click', (e) => {
+                    document.querySelectorAll('.filter-button').forEach(b => b.classList.remove('active'));
+                    e.target.classList.add('active');
+                    currentFilter = e.target.dataset.bereich;
+                    displayResults(document.getElementById('searchInput').value);
+                });
+            });
+        }
+
+        // Fuzzy search - küçük yazım hatalarına toleranslı
+        function fuzzyMatch(text, query) {
+            if (!query) return true;
+
+            const textLower = text.toLowerCase();
+            const queryLower = query.toLowerCase();
+
+            // Tam eşleşme
+            if (textLower.includes(queryLower)) return true;
+
+            // Kelime bazlı eşleşme
+            const queryWords = queryLower.split(/\s+/);
+            const textWords = textLower.split(/\s+/);
+
+            // Sorgu kelimelerinin her biri için en az bir benzer kelime var mı?
+            for (const qWord of queryWords) {
+                if (qWord.length < 2) continue;
+                let found = false;
+                for (const tWord of textWords) {
+                    if (tWord.includes(qWord)) {
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) return false;
+            }
+            return true;
+        }
+
+        // Sonuçları göster
+        function displayResults(query) {
+            const resultsDiv = document.getElementById('results');
+
+            if (!query && currentFilter === 'Alle') {
+                resultsDiv.innerHTML = '';
+                return;
+            }
+
+            // Önce arama ile filtrele (tüm alanlarda)
+            let filtered = inventory.filter(item => {
+                const searchText = `${item.bereich} ${item.artikel}`;
+                return fuzzyMatch(searchText, query);
+            });
+
+            // Sonra Bereich filtresi uygula
+            if (currentFilter !== 'Alle') {
+                filtered = filtered.filter(item => item.bereich === currentFilter);
+            }
+
+            if (filtered.length === 0) {
+                resultsDiv.innerHTML = '<div class="no-results">Sonuç bulunamadı</div>';
+                return;
+            }
+
+            resultsDiv.innerHTML = filtered.map(item => {
+                const positionTr = positionMap[item.position] || item.position;
+                return `
+                    <div class="result-item">
+                        <div class="result-name">${escapeHtml(item.artikel)}</div>
+                        <div class="result-location">${escapeHtml(item.bereich)} — ${item.seite}. sayfa — ${positionTr}</div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // HTML escape
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Event listeners
+        const searchInput = document.getElementById('searchInput');
+
+        searchInput.addEventListener('input', (e) => {
+            displayResults(e.target.value);
+        });
+
+        // iOS için zoom engelleme (focus sırasında)
+        document.addEventListener('touchstart', function(event) {
+            if (event.touches.length > 1) {
+                event.preventDefault();
+            }
+        }, { passive: false });
+
+        let lastTouchEnd = 0;
+        document.addEventListener('touchend', function(event) {
+            const now = (new Date()).getTime();
+            if (now - lastTouchEnd <= 300) {
+                event.preventDefault();
+            }
+            lastTouchEnd = now;
+        }, false);
+
+        // Uygulamayı başlat
+        loadCSV();
+    </script>
+</body>
+</html>
