@@ -156,7 +156,7 @@
         // CSV'yi parse et
         async function loadCSV() {
             try {
-                const response = await fetch('inventur-data.csv');
+                const response = await fetch('inventur-data.csv?v=' + Date.now());
                 if (!response.ok) {
                     throw new Error('CSV yüklenemedi');
                 }
