@@ -309,6 +309,10 @@
                     Dose groß
                     <small>Tara: 80 g</small>
                 </button>
+                <button class="dose-btn" id="doseBox" onclick="selectDose('box')">
+                    Box
+                    <small>Tara: 536 g</small>
+                </button>
             </div>
             <div class="tara-input-row">
                 <input type="number" class="tara-input" id="bruttoInput" placeholder="0" inputmode="numeric" oninput="calcTara()">
@@ -463,13 +467,14 @@
         }, false);
 
         // Tara hesaplayıcı
-        const TARA = { klein: 53, gross: 80 };
+        const TARA = { klein: 53, gross: 80, box: 536 };
         let selectedDose = null;
 
         function selectDose(type) {
             selectedDose = type;
             document.getElementById('doseKlein').classList.toggle('active', type === 'klein');
             document.getElementById('doseGross').classList.toggle('active', type === 'gross');
+            document.getElementById('doseBox').classList.toggle('active', type === 'box');
             calcTara();
             document.getElementById('bruttoInput').focus();
         }
